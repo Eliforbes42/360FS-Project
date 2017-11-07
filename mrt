@@ -1,0 +1,6 @@
+#mount root with vdisk script
+#!/bin/bash
+#./com
+./mnd
+./mroot vdisk
+./inode vdisk

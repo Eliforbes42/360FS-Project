@@ -1,0 +1,5 @@
+#!/bin/bash
+# run all progs (sblock, imap, inode)
+./sblock disk
+./map disk
+./inode disk
