@@ -319,7 +319,24 @@ int main(int argc, char *argv[])
 
 		else if(strcmp(cmd, "stat") == 0)
 			mystat(pathname);
-
+		else if(strcmp(cmd, "symlink") == 0){
+			printf("try cmd=%s old=%s, new=%s\n", cmd, pathname, pathname2);
+			doSymlink(pathname, pathname2);
+		}
+		else if(strcmp(cmd, "readlink") == 0){
+			int sz;
+			sz = doReadlink(pathname, buffer);
+			printf("buffer=%s, sz=%d\n", buffer, sz);
+		}
+		else if(strcmp(cmd, "chmod") == 0){
+			char *eptr;
+			int octNum = strtol(pathname, &eptr, 8);
+			//convert input str to real num(octal)-credit:techonthenet.com
+			doChmod(octNum, pathname2);
+		}
+		else if(strcmp(cmd, "utime") == 0)
+			doUtime(pathname);
+		
 		else if(strcmp(cmd, "quit") == 0){
 			printf("quitting. . .\n");
 			exit(0);
@@ -334,24 +351,3 @@ int main(int argc, char *argv[])
 	
 	return 0;	
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
