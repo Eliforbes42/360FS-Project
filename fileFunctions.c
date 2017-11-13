@@ -210,11 +210,12 @@ int verifyEmptyDir(MINODE *mip) //checks a dir to make sure its empty
 	char *cp;
 	DIR *dp;//dir struct
     int numChildren = 0;
-    
-	get_block(mip->dev, mip->INODE.i_block[0], buf); //get data block of mip->INODE
+    if(mip->INODE.i_links_count > 2)
+		return 0;//definitely not empty if >2 links
+    get_block(mip->dev, mip->INODE.i_block[0], buf); //get data block of mip->INODE
     
     dp = (DIR *)buf;
-	cp = buf;
+    cp = buf;
     
     while (cp + dp->rec_len < buf + BLKSIZE){
 		cp += dp->rec_len;
