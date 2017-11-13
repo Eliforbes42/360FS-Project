@@ -549,3 +549,4 @@ int dormdir(char *pathname)
 	pmip->dirty = 1;//mark parent pimp dirty; //direct quote from 'rmdir.pdf'
 	iput(pmip);
 }
+//
