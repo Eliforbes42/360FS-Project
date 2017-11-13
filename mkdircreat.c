@@ -162,72 +162,71 @@ int bdalloc(int dev, int bno)
 }
 int enter_child(MINODE *pmip, int ino, char *child)
 {
-INODE *pip = &pmip->INODE; 
-char *cp; DIR *dp;
-int ideal_length, name_len, need_length, remain, blk, i;
+	INODE *pip = &pmip->INODE; 
+	char *cp; DIR *dp;
+	int ideal_length, name_len, need_length, remain, blk, i;
 
-char buf[BLKSIZE];
-for(i = 0; i<12; i++)
-{
-	if(pip->i_block[i] == 0)
-		break;
-	blk = pip->i_block[i];
+	char buf[BLKSIZE];
+	for(i = 0; i<12; i++)
+	{
+		if(pip->i_block[i] == 0)
+			break;
+		blk = pip->i_block[i];
 
-	//get pip->inode->i_block[], and read parent block into buf[]		
+		//get pip->inode->i_block[], and read parent block into buf[]		
+		get_block(pmip->dev, blk, buf);
+		dp = (DIR *)buf;
+		cp = buf;
+
+		name_len = strlen(child);//calculate lengths
+		need_length = 4*( (8 + name_len + 3)/4 );
+
+		while (cp + dp->rec_len < buf + BLKSIZE){
+			cp += dp->rec_len;
+			dp = (DIR *)cp;
+		}
+		cp = (char *)dp;
+		ideal_length = 4*( (8 + name_len + 3)/4 );
+		// dp NOW points at last entry in block
+		remain = dp->rec_len - ideal_length;//remain = last rec_len - ideal_length
+
+		if (remain >= need_length){
+			dp->rec_len = ideal_length;
+
+			cp += dp->rec_len;//step forward for new entry
+			dp = (DIR *)cp;		
+
+			//enter the new entry as the LAST entry
+			dp->inode = ino;
+			dp->rec_len = remain;//dp->rec_len = BLKSIZE - ((u32)cp - (u32)buf);
+			dp->name_len = name_len;//=strlen(child)
+			//now set name, since have all info
+			strcpy(dp->name, child);
+			put_block(dev, blk , buf);//write data block to disk
+
+			return 1;
+		}					
+	}
+	blk = balloc(dev);	//balloc a new block
+	pip->i_block[i] = blk;//set block to next i_block[], likely i_block[1] for now
+
+	pip->i_size += BLKSIZE;//increment parent size by BLKSIZE
+	pmip->dirty = 1;//mark dirty
+
 	get_block(pmip->dev, blk, buf);
+
 	dp = (DIR *)buf;
 	cp = buf;
 
-	name_len = strlen(child);//calculate lengths
-	need_length = 4*( (8 + name_len + 3)/4 );
-
-	while (cp + dp->rec_len < buf + BLKSIZE){
-
-		cp += dp->rec_len;
-		dp = (DIR *)cp;
-	}
-	cp = (char *)dp;
-	ideal_length = 4*( (8 + name_len + 3)/4 );
-	// dp NOW points at last entry in block
-	remain = dp->rec_len - ideal_length;//remain = last rec_len - ideal_length
-
-	if (remain >= need_length){
-		dp->rec_len = ideal_length;
-
-		cp += dp->rec_len;//step forward for new entry
-		dp = (DIR *)cp;		
-
-		//enter the new entry as the LAST entry
-		dp->inode = ino;
-		dp->rec_len = remain;//dp->rec_len = BLKSIZE - ((u32)cp - (u32)buf);
-		dp->name_len = name_len;//=strlen(child)
-		//now set name, since have all info
-		strcpy(dp->name, child);
-		put_block(dev, blk , buf);//write data block to disk
-
-		return 1;
-	}					
-}
-blk = balloc(dev);	//balloc a new block
-pip->i_block[i] = blk;//set block to next i_block[], likely i_block[1] for now
-
-pip->i_size += BLKSIZE;//increment parent size by BLKSIZE
-pmip->dirty = 1;//mark dirty
-
-get_block(pmip->dev, blk, buf);
-
-dp = (DIR *)buf;
-cp = buf;
-
-//and enter child as first entry with rec_len=BLKSIZE-...
-dp->inode = ino;		//.
-dp->rec_len = 1024;
-dp->name_len = name_len;//..
-strcpy(dp->name, child);//...initialize all dirEntry data	
-//	}			
-//write data block to disk
-put_block(dev, blk , buf);	
-return 1;
+	//and enter child as first entry with rec_len=BLKSIZE-...
+	dp->inode = ino;		//.
+	dp->rec_len = 1024;
+	dp->name_len = name_len;//..
+	strcpy(dp->name, child);//...initialize all dirEntry data	
+	//	}			
+	//write data block to disk
+	put_block(dev, blk , buf);	
+	return 1;
 }
 
 int my_mkdir(MINODE *pmip, char *child)
@@ -239,24 +238,24 @@ int my_mkdir(MINODE *pmip, char *child)
  	int blk = balloc(dev);
 	printf("myMkdir: pino=%d, ino=%d, blk=%d\n", pmip->ino, ino, blk);
 	//(4).2 		
-	 MINODE *mip = iget(dev, ino);  // load INODE into a minode
-	 INODE *ip = &mip->INODE; //initialize mip->INODE as a DIR INODE;
+	MINODE *mip = iget(dev, ino);  // load INODE into a minode
+	INODE *ip = &mip->INODE; //initialize mip->INODE as a DIR INODE;
 	
-	 mip->refCount = 0;
-	 ip->i_mode = 0x41ED; // octal 040755: DIR type and permissions
-	 ip->i_uid = running->uid; // owner uid
-	 ip->i_gid = pmip->INODE.i_gid; // group Id
-	 ip->i_size = BLKSIZE; // size in bytes
-	 ip->i_links_count = 2; // links count=2 because of . and ..
-	 ip->i_atime = ip->i_ctime = ip->i_mtime = time(0L); //set all times to same
-	 ip->i_blocks = 2; // LINUX: Blocks count in 512-byte chunks
-	 ip->i_block[0] = blk; // new DIR has one data block//mip->INODE.i_block[0] = blk;	 	
-	 for(int j = 1; j<15; j++) 
-	 	ip->i_block[j] = 0;  //other i_block[ ] = 0;
+	mip->refCount = 0;
+	ip->i_mode = 0x41ED; // octal 040755: DIR type and permissions
+	ip->i_uid = running->uid; // owner uid
+	ip->i_gid = pmip->INODE.i_gid; // group Id
+	ip->i_size = BLKSIZE; // size in bytes
+	ip->i_links_count = 2; // links count=2 because of . and ..
+	ip->i_atime = ip->i_ctime = ip->i_mtime = time(0L); //set all times to same
+	ip->i_blocks = 2; // LINUX: Blocks count in 512-byte chunks
+	ip->i_block[0] = blk; // new DIR has one data block//mip->INODE.i_block[0] = blk;	 	
+	for(int j = 1; j<15; j++) 
+		ip->i_block[j] = 0;  //other i_block[ ] = 0;
 	
-	 mip->dirty = 1; // mark minode dirty
-	 mip->dev = dev;// mip->ino = ino;
-	 iput(mip); // write INODE to disk
+	mip->dirty = 1; // mark minode dirty
+	mip->dev = dev;// mip->ino = ino;
+	iput(mip); // write INODE to disk
 	 	
 	//(4).3. 
 	//make data block 0 of INODE to contain . and .. entries;
@@ -326,37 +325,37 @@ int my_creat(MINODE *pmip, char *child)
 	char buf[BLKSIZE]; char *cp;
 	DIR *dp;
 	//(4).1. Allocate an INODE and a disk block:
- 	int ino = ialloc(dev); printf("ino=%d\n",ino);
-// 	int blk = balloc(dev); 			
+	int ino = ialloc(dev); printf("ino=%d\n",ino);
+	//int blk = balloc(dev); 			
 	printf("myCreat: pino=%d, ino=%d\n", pmip->ino, ino);
 	//(4).2 		
-	 MINODE *mip = iget(dev, ino);  // load INODE into a minode
-	 INODE *ip = &mip->INODE; //initialize mip->INODE as a DIR INODE;
+	MINODE *mip = iget(dev, ino);  // load INODE into a minode
+	INODE *ip = &mip->INODE; //initialize mip->INODE as a DIR INODE;
 	
-	 mip->refCount = 0;
-	 ip->i_mode = 0644; // octal 0644: FILE type and permissions
-	 ip->i_uid = running->uid; // owner uid
-	 ip->i_gid = pmip->INODE.i_gid; // group Id
-	 ip->i_size = 0;// size in bytes, initially 0 for empty file
-	 ip->i_links_count = 1; // links count=1, one occurrence currently
-	 ip->i_atime = ip->i_ctime = ip->i_mtime = time(0L); //set all times to same
-//	 ip->i_blocks = 2; // LINUX: Blocks count in 512-byte chunks
-//	 ip->i_block[0] = blk; // new DIR has one data block//mip->INODE.i_block[0] = blk;	 	
-//	 for(int j = 1; j<15; j++) 
-//	 	ip->i_block[j] = 0;  //other i_block[ ] = 0;
+	mip->refCount = 0;
+	ip->i_mode = 0644; // octal 0644: FILE type and permissions
+	ip->i_uid = running->uid; // owner uid
+	ip->i_gid = pmip->INODE.i_gid; // group Id
+	ip->i_size = 0;// size in bytes, initially 0 for empty file
+	ip->i_links_count = 1; // links count=1, one occurrence currently
+	ip->i_atime = ip->i_ctime = ip->i_mtime = time(0L); //set all times to same
+	//ip->i_blocks = 2; // LINUX: Blocks count in 512-byte chunks
+	//ip->i_block[0] = blk; // new DIR has one data block//mip->INODE.i_block[0] = blk;	 	
+	//for(int j = 1; j<15; j++) 
+	//ip->i_block[j] = 0;  //other i_block[ ] = 0;
 	
-	 mip->dirty = 1; // mark minode dirty
-	 mip->dev = dev;// mip->ino = ino;
-	 iput(mip); // write INODE to disk
+	mip->dirty = 1; // mark minode dirty
+	mip->dev = dev;// mip->ino = ino;
+	iput(mip); // write INODE to disk
 	 	
 	//(4).3. 
 	//make data block 0 of INODE to contain . and .. entries;
 	
-//	bzero(buf, BLKSIZE); // optional: clear buf[ ] to 0
-//	dp = (DIR *)buf; //convert new&empty buf to dir entry
-//	cp = buf;
+	//bzero(buf, BLKSIZE); // optional: clear buf[ ] to 0
+	//dp = (DIR *)buf; //convert new&empty buf to dir entry
+	//cp = buf;
 	
-//?	put_block(dev, blk, buf); //write to blk on disk
+	//?	put_block(dev, blk, buf); //write to blk on disk
 	
 	//(4).4. //which enters (ino, child) 
  	//as a FILE_entry to the parent INODE;
@@ -413,7 +412,7 @@ int verifyEmptyDir(MINODE *mip)
 		dp = (DIR *)cp;
 		numChildren++;//keep track of how much is in dir
 	}
- // dp NOW points at last entry in block
+ 	//dp NOW points at last entry in block
 	if(numChildren > 2)
 		return 0;//false, aka not empty
 	else
@@ -462,7 +461,7 @@ int rm_child(MINODE *pmip, char *name)
 			bdalloc(pmip->dev, blk);
 			pmip->dirty = 1;
 			pip->i_block[i] = 0;
-	//		bzero(buf, BLKSIZE);
+			//bzero(buf, BLKSIZE);
 			put_block(pmip->dev, pip->i_block[i], buf);		//makes infinite loop of zero entries being ls'd
 			return 1;
 		}
@@ -486,11 +485,11 @@ int rm_child(MINODE *pmip, char *name)
 			cp = (char *)dp;
 			dp = (DIR *)cp;
 			printf("before loop to end\n");
-	//		while (cp + dp->rec_len < buf + BLKSIZE){
-	//			cp += dp->rec_len;
-	//			dp = (DIR *)cp;
-			//	printf("in loop, dp->rec_len=%d\n", dp->rec_len);
-	//		}
+			//while (cp + dp->rec_len < buf + BLKSIZE){
+			//cp += dp->rec_len;
+			//dp = (DIR *)cp;
+			//printf("in loop, dp->rec_len=%d\n", dp->rec_len);
+			//}
 			printf("after loop to end\n");// dp NOW points at last entry in block
 			dp->rec_len += remain;//add remaining length to last item
 			cp = (char *)dp;
@@ -505,8 +504,8 @@ int dormdir(char *pathname)
 	int pino, ino;
 	strcpy(path, pathname);//	strcpy(path1, pathname); strcpy(path2, pathname);
 	printf("path=%s\n", path);//	printf("path2=%s\n", path2);
-//	strcpy(child, basename(path));//child = basename(temp);
-//	printf("child=%s\n",child);	
+	//strcpy(child, basename(path));//child = basename(temp);
+	//printf("child=%s\n",child);	
 	strcpy(parent, dirname(path));//parent = dirname(temp1);
 	printf("parent=%s\n",parent);
 	//(1).
@@ -550,13 +549,3 @@ int dormdir(char *pathname)
 	pmip->dirty = 1;//mark parent pimp dirty; //direct quote from 'rmdir.pdf'
 	iput(pmip);
 }
-
-
-
-
-
-
-
-
-
-

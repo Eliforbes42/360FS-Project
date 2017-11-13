@@ -1,3 +1,3 @@
 #!/bin/bash
 #compile all 3 files
-cc -o mroot mroot.c util.c mkdircreat.c
+cc -o mroot mroot.c util.c mkdircreat.c link_unlink.c

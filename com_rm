@@ -1,0 +1,3 @@
+#!/bin/bash
+#compile all 3 files
+cc -w -m32 -o mroot_rm mroot.c util.c fileFunctions.c
