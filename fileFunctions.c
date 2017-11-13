@@ -1079,3 +1079,166 @@ void mystat(char * pathName) //gives the stat output of a given file
 	printf("Modify: %s\n", mtime);
 	printf("Birth: %s\n\n", crtime);
 }
+
+int doReadlink(char *file, char *buffer){
+	MINODE *mip, *cmip; int ino, cino, blk;
+	char buf[BLKSIZE]; char *cp;  DIR *dp;//for DIR walkthrough
+	
+	ino = getino(file);
+	mip = iget(dev, ino);
+	INODE *ip = &mip->INODE;//for convenience
+	if(ino == 0){//make sure we got something
+		printf("No link to read. . .\n");
+		return -1;
+	}
+	//check INODE is a LNK
+	if(mip->INODE.i_mode != 0777)	{
+		printf("Item(ino=%d)-> is not a link\n", ino);
+		return -1;//break out if not LNK
+	}
+	else
+		printf("Item(ino=%d)-> is a link\n", ino);
+	
+	for(int i = 0; i<12; i++)//search direct blocks
+	{
+		if(ip->i_block[i] == 0)
+			break;
+		blk = ip->i_block[i];
+		//get pip->inode->i_block[], and read parent block into buf[]		
+		get_block(mip->dev, blk, buf);
+		dp = (DIR *)buf;
+		cp = buf;
+
+		while (cp + dp->rec_len < buf + BLKSIZE){
+			if(strcmp(file, dp->name) == 0){
+				strcpy(buffer, dp->name);
+				cmip = iget(dev, dp->inode);
+				INODE *cip = &cmip->INODE;//get inode for file size
+				cip->i_size = strlen(buffer);
+				return cip->i_size;//return file size
+			}				
+			cp += dp->rec_len;
+			dp = (DIR *)cp;
+		}
+	}
+}
+int my_symlink(MINODE *pmip, MINODE *omip, char *oldChild, char *newChild){
+	char buf[BLKSIZE];  char *cp;  DIR *dp;
+	char *compositeName = newChild;
+	strcat(compositeName, "->");
+	strcat(compositeName, oldChild);
+	printf("compName=%s\n",compositeName);
+	//(4).1. Allocate an INODE:
+	int ino = ialloc(dev); printf("ino=%d\n",ino);	
+	printf("myCreat: pino=%d, ino=%d\n", pmip->ino, ino);
+	
+	//(4).2 		
+	MINODE *mip = iget(dev, ino);  // load INODE into a minode
+	INODE *ip = &mip->INODE; //initialize mip->INODE as a DIR INODE;
+	
+	mip->refCount = 0;
+	ip->i_mode = 0777;//need to change comparison in ls_file, so it prints the 'l'
+	ip->i_uid = running->uid; // owner uid
+	ip->i_gid = pmip->INODE.i_gid; // group Id
+	ip->i_size = strlen(compositeName);// size in bytes == length of file name
+	ip->i_links_count = 1; // links count=1, one occurrence currently
+	ip->i_atime = ip->i_ctime = ip->i_mtime = time(0L); //set all times to same
+	for(int j = 0; j<12; j++)
+		if(ip->i_block[j] == 0){
+			ip->i_block[j] = balloc(dev);
+			break;
+		}
+	enter_link(mip, omip->ino, compositeName);//oldChild);   //change back after naming sorted out!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	mip->dirty = 1; // mark minode dirty
+	mip->dev = dev;
+	iput(mip); // write INODE to disk
+
+	//(4).4. //which enters (ino, child) 
+	//as a LNK_entry to the parent INODE;
+	enter_child(pmip, ino, compositeName);
+}
+int doSymlink(char *oldfile, char *newfile){
+	char oldName[128], newName[128], temp[128], temp2[128], temp3[128], parent[128], child[128], newChild[128];
+	MINODE *mip, *omip, *pmip; int ino, oino, pino;
+	
+	strcpy(oldName, oldfile);	
+	strcpy(newName, newfile);
+	strcpy(temp, newfile);
+	strcpy(temp2, oldfile);
+	strcpy(temp3, newfile);
+	printf("oldFile=%s\n", oldName);	
+	printf("newFile=%s\n", newName);
+	
+	strcpy(parent, dirname(temp));//use to check if newfile's parent dir exists
+	strcpy(child, basename(temp2));//use to make new entry in parent dir
+	strcpy(newChild, basename(temp3));
+	printf("parent=%s\n",parent);
+	printf("child=%s\n",child);
+	
+	pino = getino(parent);// parent must exist and is a DIR:
+ 	pmip = iget(dev, pino);
+	if((pmip->INODE.i_mode & 0xF000) != 0x4000){//check parent inode is a DIR
+		printf("Parent(ino=%d)-> is not a dir\n", pino);
+		return -1;//break out if not DIR
+	}
+	else
+		printf("Parent(ino=%d)-> is a dir\n", pino);
+	
+	if(getino(newName) == 0)//see if newfile exists -- it shouldn't
+		printf("item doesn't exist yet\n");
+	else{
+		printf("item already exists, can't make symlink. . .\n");
+		return -1;
+	}
+	//if here, ready to make?	
+	oino = getino(oldName);// get ino & mip of oldfile
+	if(oino == 0){//check that we got something real
+		printf("Nothing to link to. . .\n");
+		return -1;
+	}
+ 	omip = iget(dev, oino);
+	//#4. 
+	my_symlink(pmip, omip, child, newChild);//make entry for oldfile in parent DIR
+	//$5.mark pmip dirty;
+	pmip->dirty = 1;
+	iput(pmip);
+}
+
+int doChmod(int nOct, char *filename){
+	int ino;
+	MINODE *mip;
+	char *tempPathname = filename;
+	ino = getino(tempPathname);//getino #
+	mip = iget(root->dev, ino);//get real minode
+	
+	//check if dir, then check if empty
+	if((mip->INODE.i_mode & 0xF000) == 0x4000){
+		if(verifyEmptyDir(mip) == 0){
+			printf("Can't chmod on DIR that isn't empty. .\n");
+			return -1;
+		}
+	}
+	
+	//if here, all good to change
+	mip->INODE.i_mode = nOct;//change mode
+	//finish up by marking dirty and putting minode back
+	mip->dirty = 1;
+	iput(mip);	
+}
+
+int doUtime(char *filename){
+	int ino;
+	MINODE *mip;
+	char *tempPathname = filename;
+	ino = getino(tempPathname);//getino #
+	mip = iget(root->dev, ino);//get real minode
+	INODE *ip = &mip->INODE;//use a direct 'ip' for convenience
+	
+	//no checks needed for utime?
+	//set all times to same
+	ip->i_atime = ip->i_ctime = ip->i_mtime = time(0L); 
+	
+	//finish up by marking dirty and putting minode back
+	mip->dirty = 1;
+	iput(mip);	
+}
