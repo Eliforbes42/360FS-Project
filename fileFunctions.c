@@ -189,8 +189,7 @@ int balloc(int dev){
 	return 0; // out of FREE blocks
 }
 
-int bdalloc(int dev, int bno)
-{
+int bdalloc(int dev, int bno){
     char buf[BLKSIZE];
     
     get_block(dev, bmap, buf); //get block bitmap block
@@ -306,6 +305,36 @@ int enter_child(MINODE *pmip, int ino, char *child) //enters (ino, child) as a d
     put_block(dev, blk , buf); //write data block to disk
     
 	return 1;
+}
+
+int enter_symlink(MINODE *pmip, int ino, char *child){
+	INODE *pip = &pmip->INODE; 
+	char *cp; DIR *dp;
+	int name_len, blk, i;
+	char buf[BLKSIZE];
+	for(i = 0; i<12; i++)
+	{
+		if(pip->i_block[i] == 0)
+			break;
+		//if past above statement, now in existing block
+		blk = pip->i_block[i];
+		
+		//get pip->inode->i_block[], and read parent block into buf[]		
+		get_block(pmip->dev, blk, buf);
+		dp = (DIR *)buf;
+		cp = buf;
+
+		name_len = strlen(child);//calculate length
+		//and enter child as first entry with rec_len=BLKSIZE-...
+		dp->inode = ino;		//.
+		dp->rec_len = name_len;
+		dp->name_len = name_len;//..
+		strcpy(dp->name, child);//...initialize all dirEntry data	
+
+		//write data block to disk
+		put_block(dev, blk , buf);	
+		return 1;
+	}					
 }
 
 //ls related functions
@@ -432,11 +461,14 @@ int ls_file(int ino)
 	if(mip->INODE.i_mode == 0x1A4) //show it's a file. 0x1A4 == 0o0644 == 420dec
 		printf("%c",'-');
 		
-    if((mip->INODE.i_mode & 0xF000) == 0x4000) //or if dir
+    else if(mip->INODE.i_mode == 040755 || mip->INODE.i_mode == 0755) //or if dir
 		printf("%c",'d');
 		
-    if((mip->INODE.i_mode & 0xF000) == 0xA000) //or link
+    else if(mip->INODE.i_mode == 0777)//or link
     	printf("%c",'l');
+	
+	else
+		printf("%c",'-');//otherwise fill out the line
   
 	//loop to print that weird token string
 	  
@@ -457,6 +489,15 @@ int ls_file(int ino)
 	ftime[strlen(ftime)-1] = 0;
 	  
 	printf("%s  ", ftime); //print the name
+	
+	/*
+	if(mip->INODE.i_mode == 0644)//show it's a file. 0x1A4 == 0o0644 == 420dec
+		printf("%c",'-');
+	if(mip->INODE.i_mode == 040755)//or if dir
+		printf("%c",'d');
+	if(mip->INODE.i_mode == 0777)//or link
+		printf("%c",'l');*/
+
 }
 
 
@@ -539,7 +580,13 @@ int chdir(char *pathname)
 			} 	
 
 			mip = iget(dev, ino);
-				
+			if((mip->INODE.i_mode & 0xF000) != 0x4000) //check pmip->INODE is a DIR
+			{
+				printf("(ino=%d)->%s is not a dir\n", ino, pathname);
+				return -1;//break out if bad
+			}
+			else
+				printf("(ino=%d)->%s is a dir, so cd now\n", ino, pathname);
 			iput(running->cwd);
 			
 			running->cwd = mip;
@@ -738,7 +785,7 @@ int my_creat(MINODE *pmip, char *child) //creates a file
 	mip = iget(dev, ino);  //load INODE into a minode
 	ip = &mip->INODE; //initialize mip->INODE as a DIR INODE;
 	
-	ip->i_mode = 0x8000; //octal 0644: FILE type and permissions
+	ip->i_mode = 0644; //octal 0644: FILE type and permissions
 	ip->i_uid = running->uid; //owner uid
 	ip->i_gid = pmip->INODE.i_gid; //group Id
 	ip->i_size = 0; //size in bytes, initially 0 for empty file
@@ -1149,7 +1196,7 @@ int my_symlink(MINODE *pmip, MINODE *omip, char *oldChild, char *newChild){
 			ip->i_block[j] = balloc(dev);
 			break;
 		}
-	enter_link(mip, omip->ino, compositeName);//oldChild);   //change back after naming sorted out!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	enter_symlink(mip, omip->ino, compositeName);//oldChild);   //change back after naming sorted out!!!!
 	mip->dirty = 1; // mark minode dirty
 	mip->dev = dev;
 	iput(mip); // write INODE to disk

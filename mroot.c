@@ -233,8 +233,9 @@ void printMenu()
 	printf("---------------------------------------------------\n");
 	printf("| %sLevel 1%s |                                       |\n", COLOR_BLUE, COLOR_RESET);
 	printf("|-------------------------------------------------|\n");
-	printf("| ls    | cd    | pwd   | stat | %schmod%s  | %stouch%s   |\n", COLOR_RED,COLOR_RESET, COLOR_RED, COLOR_RESET);
+	printf("| ls    | cd    | pwd   | stat | chmod  | utime   |\n");
 	printf("| mkdir | creat | rmdir | link | unlink | symlink |\n");
+	printf("|                                       | readlink|\n");
 	printf("|-------------------------------------------------|\n");
 	printf("| %sLevel 2%s |                                       |\n", COLOR_BLUE, COLOR_RESET);
 	printf("|-------------------------------------------------|\n");
@@ -274,8 +275,8 @@ int main(int argc, char *argv[])
 
 		//printMenu();
 		
-		printf("\nEnter 'help' for list of functions\n");
-		printf("input:");
+		printf("\nEnter '%shelp%s' for list of functions\n", COLOR_GREEN, COLOR_RESET);
+		printf("%sinput%s: ", COLOR_GREEN, COLOR_RESET);
 
 		bzero(pathname, 63);
 		bzero(pathname2, 63);
@@ -324,8 +325,8 @@ int main(int argc, char *argv[])
 			doSymlink(pathname, pathname2);
 		}
 		else if(strcmp(cmd, "readlink") == 0){
-			int sz;
-			sz = doReadlink(pathname, buffer);
+			char buffer[BLKSIZE];
+			int sz = doReadlink(pathname, buffer);
 			printf("buffer=%s, sz=%d\n", buffer, sz);
 		}
 		else if(strcmp(cmd, "chmod") == 0){

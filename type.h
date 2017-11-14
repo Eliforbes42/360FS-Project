@@ -1,4 +1,5 @@
 /*************** type.h file ******************/
+//============================================//
 typedef unsigned char  u8;
 typedef unsigned short u16;
 typedef unsigned int   u32;
@@ -97,4 +98,4 @@ int iput(MINODE *mip);
 int search(MINODE *mip, char *name);
 int getino(char *pathname);
 int mkdir(char *pathname);
-//================= end of type.h ===================
+//================= end of type.h ===================//
