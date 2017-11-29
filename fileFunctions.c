@@ -1290,3 +1290,97 @@ int doUtime(char *filename){
 	mip->dirty = 1;
 	iput(mip);	
 }
+
+int doOpen(char *file, int flags){
+	int ino, curFd;	MINODE *mip;   OFT *toftp = NULL;
+	
+	char *tempPathname = file;
+	ino = getino(tempPathname);//getino #
+	
+	//check for invalid file
+	if(ino == 0 && O_CREAT){
+		docreat(tempPathname);//if so, make file
+		ino = getino(tempPathname);//getino #
+	}
+	mip = iget(root->dev, ino);//get real minode
+	INODE *ip = &mip->INODE;//use a direct 'ip' for convenience
+		
+	//check INODE permissions
+	if((mip->INODE.i_mode & 0xF000) != 0x8000){
+		printf("Error: Invalid File\n");
+		return -1;
+	}
+	
+	//check for bad flags
+	if(flags != O_RDONLY && 
+	   flags != O_WRONLY && 
+	   flags != O_APPEND && 
+	   flags != O_RDRW)
+	{
+		printf("Error: Invalid Flags\n");
+		return -1;
+	}
+	
+	//see if file already in use
+	for(int i = 0; i < NFD; i++){
+		if(running->fd[i]->mptr == mip){
+			printf("Error: File already in use\n");
+			return -1;//or return i?
+		}
+	}
+	
+	//allocate openTable entry
+	OFT *oftp = malloc(sizeof(OFT));
+	//initialize entries(fill too?)
+	oftp->mode = flags;
+	oftp->refCount++;
+	oftp->mptr = mip;//mptr points to file's minode
+
+	//set offset according to flags
+	if(flags == O_RDONLY || flags == O_WRONLY || flags == O_RDRW)
+		oftp->offset = 0;
+	else if(flags == O_APPEND)
+		oftp->offset = ip->i_size;
+	else
+		oftp->offset = 0;  //default case
+	
+	//search for free fd in running PROC
+	for(int i = 0; i < NFD; i++)	{
+		if(i == NFD - 1){
+			printf("***Out of File Descriptors!***\n");	
+		}
+		if(running->fd[i] == NULL){
+			running->fd[i] = oftp;//fd[i] point to the new entry
+			curFd = i;//keep it, just in case			
+			break;//found free fd, break out with found index		
+		}
+	}
+	return curFd;//return the file descriptor
+}
+
+int doClose(int fd){
+	//ensure valid fd
+	OFT *tof = running->fd[fd];//tof == temp open file
+	if(tof != 0){
+		if(--tof->refCount == 0)//if last process using this OFT
+			iput(tof->mptr);//release minode
+	}
+	else{
+		printf("Error: Bad file descriptor\n");
+		return -1;
+	}
+	
+	//clear fd, since done closing
+	running->fd[fd] = 0;//0 == NULL == clear
+	return 0;//return success
+}
+
+int dolSeek(int fd, int position){
+	OFT *tof = running->fd[fd];
+	if(tof != 0)//check valid fd
+	{
+		if(tof->mode == O_RDONLY)
+			if(0 <= position && position <= tof->mptr->INODE.i_size)
+				tof->offset = position;
+	}
+}
