@@ -146,7 +146,7 @@ void init() //Initialize data structures of LEVEL-1:
 	proc[1].pid = 2;
 	proc[1].uid = 1;
 	proc[1].cwd = 0;
-	proc[0].fd[NFD] = 0;
+	proc[1].fd[NFD] = 0;
 	
 	for(int i = 0; i < NMINODE; i++)
 		minode[i].refCount = 0;	
