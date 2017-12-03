@@ -785,7 +785,7 @@ int my_creat(MINODE *pmip, char *child) //creates a file
 	mip = iget(dev, ino);  //load INODE into a minode
 	ip = &mip->INODE; //initialize mip->INODE as a DIR INODE;
 	
-	ip->i_mode = 0644; //octal 0644: FILE type and permissions
+	ip->i_mode = 0x81a4; //octal 0644: FILE type and permissions
 	ip->i_uid = running->uid; //owner uid
 	ip->i_gid = pmip->INODE.i_gid; //group Id
 	ip->i_size = 0; //size in bytes, initially 0 for empty file
@@ -976,6 +976,7 @@ void link(char * old_file, char * new_file) //creates a hard link for a specifie
     char *child;
     char *temp_new_file = malloc(sizeof(char) * strlen(new_file));
 
+	//printf("0: old_file = %s\n", old_file);
     oino = getino(old_file);
     omip = iget(dev, oino);
 
@@ -986,9 +987,16 @@ void link(char * old_file, char * new_file) //creates a hard link for a specifie
     }
 
     strcpy(temp_new_file, new_file);
+	//printf("1: temp_new_file = %s\n", temp_new_file);
+	//printf("2: new_file = %s\n", new_file);
+
 
     parent = dirname(new_file);
     child = basename(temp_new_file);
+
+	//printf("3: parent = %s\n", parent);
+	//printf("4: child = %s\n", child);
+
 
     pino = getino(parent);
     pmip = iget(dev, pino);
@@ -998,9 +1006,10 @@ void link(char * old_file, char * new_file) //creates a hard link for a specifie
         return;
     }
 
-    if(search(pmip, child) != 0)//maybe will work, not sure yet
-        return;
-
+    if(search(pmip, child) != 0){//maybe will work, not sure yet
+		printf("error 1, returning \n");
+	    return;
+	}
     enter_child(pmip, oino, child);
 
     omip->INODE.i_links_count++;
@@ -1016,17 +1025,35 @@ void unlink(char *file_name) //removes hard link
 {
     int ino;
     int pino;
-    char *parent;
-    char *child;
+	char parent1[128], parent2[128], child1[128], child2[128], path1[BLKSIZE], path2[BLKSIZE], path3[BLKSIZE], path4[BLKSIZE], temp1[BLKSIZE],temp2[BLKSIZE];
     char *temp_file_name = malloc(sizeof(char) * strlen(file_name));
     char *temp_file_name2 = malloc(sizeof(char) * strlen(file_name));
     MINODE *mip;
     MINODE *pmip;
 
-    strcpy(temp_file_name, file_name);
-    strcpy(temp_file_name2, file_name);
+	strcpy(temp_file_name, file_name);
+   
+    strcpy(path1, file_name);
+	strcpy(path2, file_name); 
+	strcpy(temp1, file_name);
 
-    ino = getino(file_name);
+    //printf("path1=%s\n", path1);
+    //printf("path2=%s\n", path2);
+	
+	strcpy(child1, basename(path1)); //child = basename(temp);
+	//printf("child=%s\n",child1);	
+    
+    strcpy(parent1, dirname(path2)); //parent = dirname(temp1);
+	//printf("parent=%s\n",parent1);
+
+	if(file_name[0] == '/'){
+		//printf("filename = %s\n", file_name);
+		ino = getino(file_name);
+	}
+	else{
+		ino = getino(child1);
+	}
+
     mip = iget(dev, ino);
 
     if((mip->INODE.i_mode & 0xF000) == 0x4000){//check mip->inode file type(must not be DIR)
@@ -1034,17 +1061,21 @@ void unlink(char *file_name) //removes hard link
         return;
     }
     
-    parent = dirname(temp_file_name2);
-    child = basename(temp_file_name);
+    //parent = dirname(temp_file_name2);
+    //child = basename(temp_file_name);
 
-    pino = getino(parent);
+	//printf("3: parent = %s\n", parent1);
+	//printf("4: child = %s\n", child1);
+
+    pino = getino(parent1);
     pmip = iget(dev,pino);
 
-    rm_child(pmip,child);
+    rm_child(pmip,child1);
 
     pmip->dirty = 1;
     
     iput(pmip);
+	//printf("5: after iput\n");
 
     mip->INODE.i_links_count--;
 
@@ -1292,11 +1323,15 @@ int doUtime(char *filename){
 }
 
 int doOpen(char *file, int flags){
-	int ino, curFd;	MINODE *mip;   OFT *toftp = NULL;
-	
+	int ino, curFd;	
+	MINODE *mip;   
+	OFT *toftp = NULL;
 	char *tempPathname = file;
+
 	ino = getino(tempPathname);//getino #
 	
+	printf("file = %s, flags = %d\n", file, flags);
+
 	//check for invalid file
 	if(ino == 0 && O_CREAT){
 		docreat(tempPathname);//if so, make file
@@ -1305,8 +1340,11 @@ int doOpen(char *file, int flags){
 	mip = iget(root->dev, ino);//get real minode
 	INODE *ip = &mip->INODE;//use a direct 'ip' for convenience
 		
+
+	
 	//check INODE permissions
 	if((mip->INODE.i_mode & 0xF000) != 0x8000){
+		printf("file type is %x\n", mip->INODE.i_mode);
 		printf("Error: Invalid File\n");
 		return -1;
 	}
@@ -1321,6 +1359,8 @@ int doOpen(char *file, int flags){
 		return -1;
 	}
 	
+	printf("running->fd[0]->mode = %d", running->fd[0]->mode);
+	printf("1. here\n");
 	//see if file already in use
 	for(int i = 0; i < NFD; i++){
 		if(running->fd[i]->mptr == mip){
@@ -1328,6 +1368,8 @@ int doOpen(char *file, int flags){
 			return -1;//or return i?
 		}
 	}
+
+	
 	
 	//allocate openTable entry
 	OFT *oftp = malloc(sizeof(OFT));
@@ -1335,6 +1377,8 @@ int doOpen(char *file, int flags){
 	oftp->mode = flags;
 	oftp->refCount++;
 	oftp->mptr = mip;//mptr points to file's minode
+
+	
 
 	//set offset according to flags
 	if(flags == O_RDONLY || flags == O_WRONLY || flags == O_RDRW)
@@ -1537,4 +1581,148 @@ int doWrite(int fd, char buf[], int nbytes){
 	}
 	else
 		return res;
+}
+
+void myPfd(){
+
+	int i = 0;
+	int ino, pino;
+	MINODE *mip;
+	MINODE *pmip;
+	char myName[128];
+
+
+	for(i = 0; i < 16; i++){
+		if(running->fd[i] != NULL){
+
+			mip = running->fd[i]->mptr;
+
+			findParent(mip, &mip->ino, &pino);
+			pmip = iget(dev, pino);
+			findName(pmip, mip->ino, myName);
+
+			printf("\nfd	mode	count	offset	(dev,ino)	filename\n");
+			printf("--	----	-----	------	---------	--------\n");
+			printf("%d	", i);
+
+			if(running->fd[i]->mode == 0)
+				printf("RD  	");
+			else if(running->fd[i]->mode == 1)
+				printf("WR  	");
+			else if(running->fd[i]->mode == 2)
+				printf("RDWR	");
+			else if(running->fd[i]->mode == 2)
+				printf("AP  	");
+			
+			printf("%d	%d	(%d, %d)	%s\n", running->fd[i]->refCount, running->fd[i]->offset, mip->dev, mip->ino, myName);
+		}
+
+	}
+}
+
+void myMove(char * old_file, char * new_file){
+	//ex mv /x/y/z /a/b
+	char *temp_old_file1 = malloc(sizeof(char) * strlen(old_file));
+	char *temp_old_file_backup = malloc(sizeof(char) * strlen(old_file));
+	char *temp_old_file2 = malloc(sizeof(char) * strlen(old_file));
+	char *temp_new_file;
+
+	strcpy(temp_old_file1, old_file);
+	strcpy(temp_old_file_backup, old_file);
+
+	temp_old_file2 = basename(temp_old_file1);
+	temp_new_file = malloc(sizeof(char) * (strlen(old_file) + strlen(temp_old_file2)));
+
+	strcpy(temp_new_file, new_file);
+
+	strcat(temp_new_file, "/");
+	strcat(temp_new_file, temp_old_file2);
+
+	link(temp_old_file_backup, temp_new_file);
+	unlink(old_file);
+}
+
+void myCopy(char * old_file, char * new_file){
+	
+	/*
+	1. determine type of file to be copied
+		lets not worry about dirs right now, focus on files
+	2. create a new file in location
+	3. open old file for read
+	4. open new file for write
+	5. copy over chunk by chunk the information until eof
+	6. close both files
+	*/
+	MINODE *omip;
+    MINODE *pmip;
+    int oino, pino;
+    char *parent;
+    char *child;
+
+	char *temp_old_file1 = malloc(sizeof(char) * strlen(old_file));
+	char *temp_old_file_backup = malloc(sizeof(char) * strlen(old_file));
+	char *temp_old_file2 = malloc(sizeof(char) * strlen(old_file));
+	char *temp_new_file3 = malloc(sizeof(char) * strlen(old_file));
+	char *temp_new_file;
+
+	strcpy(temp_old_file1, old_file);
+	strcpy(temp_old_file_backup, old_file);
+
+	temp_old_file2 = basename(temp_old_file1);
+	temp_new_file = malloc(sizeof(char) * (strlen(old_file) + strlen(temp_old_file2)));
+
+	strcpy(temp_new_file, new_file);
+
+	strcat(temp_new_file, "/");
+	strcat(temp_new_file, temp_old_file2);
+
+	//link(temp_old_file_backup, temp_new_file);
+	//unlink(old_file);
+
+	//"old_file" = temp_old_file_backup
+	//"new_file" = temp_new_file
+
+	oino = getino(temp_old_file_backup);
+    omip = iget(dev, oino);
+
+	if((omip->INODE.i_mode & 0xF000) == 0x4000) //check omip->inode file type(must not be DIR)
+    {
+        printf("this is a dir, you cant do that!\n");
+        return;
+    }
+	
+	strcpy(temp_new_file3, temp_new_file);
+	//printf("1: temp_new_file = %s\n", temp_new_file);
+	//printf("2: new_file = %s\n", new_file);
+
+
+    parent = dirname(temp_new_file);
+    child = basename(temp_new_file3);
+
+	//printf("3: parent = %s\n", parent);
+	//printf("4: child = %s\n", child);
+
+
+    pino = getino(parent);
+    pmip = iget(dev, pino);
+    
+    if((pmip->INODE.i_mode & 0xF000) != 0x4000){ //its a dir
+        printf("this is a file, you cant do that!\n");
+        return;
+    }
+
+    if(search(pmip, child) != 0){//maybe will work, not sure yet
+		printf("error 1, returning \n");
+	    return;
+	}
+    enter_child(pmip, oino, child);
+
+    omip->INODE.i_links_count++;
+    omip->dirty = 1;
+
+    iput(omip);
+    iput(pmip);
+
+    return;
+
 }

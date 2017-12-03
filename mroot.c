@@ -229,6 +229,7 @@ void mount_root() //mount root file system, establish / and CWDs
 	printf("end of mount_root\n");
 }
 
+
 void printMenu()
 {
 	printf("\nFunction choices (%sred not yet implemented%s)\n", COLOR_RED,COLOR_RESET);
@@ -241,13 +242,17 @@ void printMenu()
 	printf("|-------------------------------------------------|\n");
 	printf("| %sLevel 2%s |                                       |\n", COLOR_BLUE, COLOR_RESET);
 	printf("|-------------------------------------------------|\n");
-	printf("| %sopen%s | %sclose%s | %sread%s | %swrite%s | %slseek%s |           |\n", COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET);
-	printf("| %scat%s  | %scp%s    | %smv%s   |                           |\n", COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET);
+	printf("| open | close | read | write | lseek |           |\n");
+	printf("| %scat%s  | %scp%s    | mv   |                           |\n", COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET);
 	printf("|-------------------------------------------------|\n");
 	printf("| %sLevel 3%s |                                       |\n", COLOR_BLUE, COLOR_RESET);
 	printf("|-------------------------------------------------|\n");
 	printf("| %smount%s | %sunmount%s | %sfilePermissionChecking%s |      |\n", COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET);
+	printf("| %sOther functions%s |                                       |\n", COLOR_BLUE, COLOR_RESET);
+	printf("|-------------------------------------------------|\n");
+	printf("| pfd |											  |\n");
 	printf("---------------------------------------------------\n");
+
 	
 }
 
@@ -322,21 +327,25 @@ int main(int argc, char *argv[])
 
 		else if(strcmp(cmd, "stat") == 0)
 			mystat(pathname);
+
 		else if(strcmp(cmd, "symlink") == 0){
 			printf("try cmd=%s old=%s, new=%s\n", cmd, pathname, pathname2);
 			doSymlink(pathname, pathname2);
 		}
+
 		else if(strcmp(cmd, "readlink") == 0){
 			char buffer[BLKSIZE];
 			int sz = doReadlink(pathname, buffer);
 			printf("buffer=%s, sz=%d\n", buffer, sz);
 		}
+
 		else if(strcmp(cmd, "chmod") == 0){
 			char *eptr;
 			int octNum = strtol(pathname, &eptr, 8);
 			//convert input str to real num(octal)-credit:techonthenet.com
 			doChmod(octNum, pathname2);
 		}
+
 		else if(strcmp(cmd, "utime") == 0)
 			doUtime(pathname);
 		
@@ -344,8 +353,46 @@ int main(int argc, char *argv[])
 			printf("quitting. . .\n");
 			exit(0);
 		}
+
 		else if(strcmp(cmd, "help") == 0){
 			printMenu();
+		}
+
+		else if(strcmp(cmd, "write") == 0){
+			
+		
+		}
+		else if(strcmp(cmd, "read") == 0){
+			
+		}
+
+		else if(strcmp(cmd, "open") == 0){
+			
+			if(strcmp(pathname2, "0") == 0)
+				doOpen(pathname,0);
+			else if(strcmp(pathname2, "1") == 0)
+				doOpen(pathname,1);
+			else if(strcmp(pathname2, "2") == 0)
+				doOpen(pathname,2);
+			else if(strcmp(pathname2, "3") == 0)
+				doOpen(pathname,3);
+		}
+
+		else if(strcmp(cmd, "close") == 0){
+			int flagnum = atoi(pathname);
+			close(flagnum);
+		}
+
+		else if(strcmp(cmd, "mv") == 0){
+			myMove(pathname, pathname2);
+		}
+
+		else if(strcmp(cmd, "cp") == 0){
+			printf("not done yet\n");
+		}
+
+		else if(strcmp(cmd, "pfd") == 0){
+			myPfd();
 		}
 
 		else
