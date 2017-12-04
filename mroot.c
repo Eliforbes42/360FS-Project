@@ -103,6 +103,8 @@ int findParent(MINODE *mip, int *ino, int *pip)
 	char buf[BLKSIZE]; char *cp;
 
     
+	fprintf(stderr, "inside findparent\n");
+
 	if(!mip) //exists?
 		return 1;
 
@@ -250,7 +252,7 @@ void printMenu()
 	printf("| %smount%s | %sunmount%s | %sfilePermissionChecking%s |      |\n", COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET);
 	printf("| %sOther functions%s |                                       |\n", COLOR_BLUE, COLOR_RESET);
 	printf("|-------------------------------------------------|\n");
-	printf("| pfd |											  |\n");
+	printf("|	|											  |\n");
 	printf("---------------------------------------------------\n");
 
 	
@@ -285,6 +287,7 @@ int main(int argc, char *argv[])
 		printf("\nEnter '%shelp%s' for list of functions\n", COLOR_GREEN, COLOR_RESET);
 		printf("%sinput%s: ", COLOR_GREEN, COLOR_RESET);
 
+		bzero(cmd, 63);
 		bzero(pathname, 63);
 		bzero(pathname2, 63);
 
@@ -297,7 +300,12 @@ int main(int argc, char *argv[])
 
 		line[strlen(line)-1] = 0; //get rid of '\n'
 	
-		sscanf(line, "%s %s %s", cmd, pathname, pathname2);//put into separate strings	
+		sscanf(line, "%s %s %[^\n]", cmd, pathname, pathname2);//put into separate strings	
+		
+		printf("cmd = %s\n", cmd);
+		printf("pathname = %s\n", pathname);
+		printf("pathname2 = %s\n", pathname2);
+
 
 		if(strcmp(cmd, "ls") == 0)
 			ls_dir(pathname);
@@ -358,37 +366,16 @@ int main(int argc, char *argv[])
 			printMenu();
 		}
 
-		else if(strcmp(cmd, "write") == 0){
-			
-		
-		}
-		else if(strcmp(cmd, "read") == 0){
-			
-		}
-
-		else if(strcmp(cmd, "open") == 0){
-			
-			if(strcmp(pathname2, "0") == 0)
-				doOpen(pathname,0);
-			else if(strcmp(pathname2, "1") == 0)
-				doOpen(pathname,1);
-			else if(strcmp(pathname2, "2") == 0)
-				doOpen(pathname,2);
-			else if(strcmp(pathname2, "3") == 0)
-				doOpen(pathname,3);
-		}
-
-		else if(strcmp(cmd, "close") == 0){
-			int flagnum = atoi(pathname);
-			close(flagnum);
-		}
-
 		else if(strcmp(cmd, "mv") == 0){
 			myMove(pathname, pathname2);
 		}
 
 		else if(strcmp(cmd, "cp") == 0){
-			printf("not done yet\n");
+			//printf("not done yet\n");
+			myCopy(pathname, pathname2);
+		}
+		else if(strcmp(cmd, "cat") == 0){
+			myCat(pathname, pathname2);
 		}
 
 		else if(strcmp(cmd, "pfd") == 0){

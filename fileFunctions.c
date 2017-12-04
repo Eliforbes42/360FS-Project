@@ -1359,13 +1359,16 @@ int doOpen(char *file, int flags){
 		return -1;
 	}
 	
-	printf("running->fd[0]->mode = %d", running->fd[0]->mode);
+	//printf("running->fd[0]->mode = %d", running->fd[0]->mode);
 	printf("1. here\n");
 	//see if file already in use
+
 	for(int i = 0; i < NFD; i++){
-		if(running->fd[i]->mptr == mip){
-			printf("Error: File already in use\n");
-			return -1;//or return i?
+		if(running->fd[i] != NULL){
+			if(running->fd[i]->mptr == mip){
+				printf("Error: File already in use\n");
+				return -1;//or return i?
+			}
 		}
 	}
 
@@ -1375,7 +1378,8 @@ int doOpen(char *file, int flags){
 	OFT *oftp = malloc(sizeof(OFT));
 	//initialize entries(fill too?)
 	oftp->mode = flags;
-	oftp->refCount++;
+	//oftp->refCount++;
+	oftp->refCount = mip->refCount;
 	oftp->mptr = mip;//mptr points to file's minode
 
 	
@@ -1463,36 +1467,78 @@ int doRead_file(int fd, char *buf, int nbytes, int space){
 	int count = 0; //#bytes read
 	int avail = tof->mptr->INODE.i_size - tof->offset;//#available bytes
 	
-	while(nbytes){//while we still need to read
+	printf("\ninode = %d\n\n", mip->ino);
+
+	//printf("kbuf = %s\n", kbuf);
+
+	bzero(kbuf, BLKSIZE);
+
+	while(nbytes > 0){//while we still need to read
 		lbk = tof->offset / BLKSIZE;	//compute logical block
 		start = tof->offset % BLKSIZE;	//start byte in block
 		
 		blk = mapBlk(ip,lbk,fd);//convert logical to physical block number
 		
+
+		printf("blk = %d\n", blk);
 		get_block(dev, blk, kbuf);//use running->dev?
-		char *cp = kbuf + start;
+
+
+		char *cpLocal = kbuf + start;
 		remain = BLKSIZE - start;
+
+		printf("kbuf = %s\n", kbuf);
+		printf("start = %d\n", start);
+		printf("lbk = %d\n", lbk);
+		printf("blk = %d\n", blk);
+		printf("remain = %d\n", remain);
+
 		while(remain){
 			//(remain) ? put_ubyte(*cp++, *buf++) : 
-			if(remain > 4){  //if > 4 bytes left to copy
-				memcpy(buf, cp, 4);//copy 4 bytes
-				*buf += 4; *cp += 4;//increment all appropriately
-				tof->offset += 4; count += 4;
-				remain -= 4; avail -= 4; nbytes -= 4;
+			if(nbytes > 4){  //if > 4 bytes left to copy
+
+				memcpy(buf, cpLocal, 4);//copy 4 bytes
+
+				*buf++;
+				*buf++;
+				*buf++;
+				*buf++;
+				*cpLocal++;
+				*cpLocal++;
+				*cpLocal++;
+				*cpLocal++;
+
+				tof->offset += 4; 
+				count += 4;
+				remain -= 4; 
+				avail -= 4; 
+				nbytes -= 4;
 			}
 			else{
-				*buf++ = *cp++;
-				tof->offset++; count++;             //inc offset, count
-				remain--; avail--; nbytes--;   //dec remain, avail, nbytes
+
+				memcpy(buf, cpLocal, 1);
+
+				*buf++;
+				*cpLocal++;
+				tof->offset++; 
+				count++;             //inc offset, count
+				remain--; 
+				avail--; 
+				nbytes--;   //dec remain, avail, nbytes
 			}
-			if(nbytes == 0 || avail == 0)
+			if(nbytes <= 0 || avail == 0){
 				break;
+			}
 		}
 	}
+	//printf("\nstring = %s\n",buf);
 	return count;
 }
 
 int kread(int fd, char buf[], int nbytes, int space){ //space=K|U
+
+	printf("inside kRead, fd = %d, char buf[] = %s, int nbytes = %d\n", fd, buf, nbytes);
+
 	OFT *tof = running->fd[fd];
 	
 	//check valid fd
@@ -1507,6 +1553,8 @@ int kread(int fd, char buf[], int nbytes, int space){ //space=K|U
 }
 
 int doRead(int fd, char buf[], int nbytes){
+
+	printf("inside doRead, fd = %d, char buf[] = %s, int nbytes = %d\n", fd, buf, nbytes);
 	//invokes kread() immediatey
 	int space = 0, res = -1; //0 == K ?	//since passed into kread
 	if((res = kread(fd, buf, nbytes, space)) == -1){
@@ -1518,6 +1566,8 @@ int doRead(int fd, char buf[], int nbytes){
 }
 
 int doWrite_file(int fd, char *buf, int nbytes){
+	
+	printf("fd = %d, buf = %s, nbytes = %d\n", fd, buf, nbytes);
 	char kbuf[BLKSIZE];
 	
 	OFT *tof = running->fd[fd];//easier access
@@ -1525,33 +1575,79 @@ int doWrite_file(int fd, char *buf, int nbytes){
 	INODE *ip = &mip->INODE;
 	int blk, lbk, start, remain;
 	int count = 0; //#bytes read
+	int i;
+	//fprintf(stderr, "inside doWrite_file\n");
 	
-	while(nbytes){//while we still need to read
+	bzero(kbuf, BLKSIZE);
+
+
+	while(nbytes > 0){//while we still need to read
 		lbk = tof->offset / BLKSIZE;	//compute logical block
 		start = tof->offset % BLKSIZE;	//start byte in block
 		
 		blk = mapBlk(ip,lbk,fd);//convert logical to physical block number
 		
 		get_block(dev, blk, kbuf);//use running->dev?
-		char *cp = kbuf + start;
+
+
+		char *cpLocal = kbuf + start;
 		remain = BLKSIZE - start;
+		
+
+		//printf("start = %d\n", start);
+		//printf("lbk = %d\n", lbk);
+		//printf("blk = %d\n", blk);
+		//printf("remain = %d\n", remain);
+
 		while(remain){
-			if(remain > 4){  //if > 4 bytes left to copy
-				memcpy(cp, buf, 4);//copy 4 bytes
-				*buf += 4; *cp += 4;//increment all appropriately
-				tof->offset += 4; count += 4;
-				remain -= 4; nbytes -= 4;
+			//getchar();
+			if(nbytes > 4){  //if > 4 bytes left to copy
+				//printf("cp = %s\n", cpLocal);
+				//printf("buf = %s\n", buf);
+				
+				memcpy(cpLocal, buf, 4);//copy 4 bytes
+
+				*buf++;
+				*buf++;
+				*buf++;
+				*buf++;
+				*cpLocal++;
+				*cpLocal++;
+				*cpLocal++;
+				*cpLocal++;
+
+				
+				tof->offset += 4;
+				count += 4;
+				remain -= 4;
+				nbytes -= 4;
+
 			}
 			else{
-				*cp++ = *buf++;//pretty much: put_ubyte(*cp++, *buf++);				
-				tof->offset++; count++; //inc offset, count
-				remain--; nbytes--;     //dec remain, nbytes
+				//printf("cp = %s\n", cpLocal);
+				//printf("buf = %s\n", buf);
+				//*cpLocal++ = *buf++;//pretty much: put_ubyte(*cp++, *buf++);		
+				memcpy(cpLocal, buf, 1);		
+				*buf++;
+				*cpLocal++;
+
+				
+				tof->offset++; 
+				count++; //inc offset, count
+				remain--; 
+				nbytes--;     //dec remain, nbytes
 			}
 			if(tof->offset > ip->i_size)
 				ip->i_size++;
-			if(nbytes <= 0)
+
+			printf("nbytes = %d\n", nbytes);
+			if(nbytes <= 0){
+				//printf("this should be working\n");
 				break;
+			}
 		}
+
+		//printf("kbuf = %s\n", kbuf);
 		put_block(dev, blk, kbuf);
 	}
 	mip->dirty = 1; //dirty minode - we just wrote all over it
@@ -1561,6 +1657,8 @@ int doWrite_file(int fd, char *buf, int nbytes){
 int kwrite(int fd, char *ubuf, int nbytes){
 	OFT *tof = running->fd[fd];
 	
+	fprintf(stderr, "inside kWrite\n");
+
 	//check valid fd
 	if(tof != 0){
 		if(tof->mode == O_WRONLY || tof->mode == O_RDRW)//ensure: open for WRITE|RW
@@ -1574,6 +1672,8 @@ int kwrite(int fd, char *ubuf, int nbytes){
 
 int doWrite(int fd, char buf[], int nbytes){
 	//invokes kwrite() immediatey
+
+	fprintf(stderr, "inside doWrite\n");
 	int res = -1;
 	if((res = kwrite(fd, buf, nbytes)) == -1){
 		printf("Error: Couldn't read file\n");
@@ -1589,17 +1689,22 @@ void myPfd(){
 	int ino, pino;
 	MINODE *mip;
 	MINODE *pmip;
-	char myName[128];
+	char myName[BLKSIZE];
 
+
+	//printf("1. in mypfd\n");
 
 	for(i = 0; i < 16; i++){
 		if(running->fd[i] != NULL){
 
 			mip = running->fd[i]->mptr;
+			fprintf(stderr, "before findparent\n");
 
-			findParent(mip, &mip->ino, &pino);
+			//findParent(mip, mip->ino, pino);
+			//fprintf(stderr, "after findparent\n");
 			pmip = iget(dev, pino);
-			findName(pmip, mip->ino, myName);
+			//printf("myname = %s\n", myName);
+			//findName(pmip, mip->ino, myName);
 
 			printf("\nfd	mode	count	offset	(dev,ino)	filename\n");
 			printf("--	----	-----	------	---------	--------\n");
@@ -1614,8 +1719,9 @@ void myPfd(){
 			else if(running->fd[i]->mode == 2)
 				printf("AP  	");
 			
-			printf("%d	%d	(%d, %d)	%s\n", running->fd[i]->refCount, running->fd[i]->offset, mip->dev, mip->ino, myName);
+			printf("%d	%d	(%d, %d)	\n", running->fd[i]->refCount, running->fd[i]->offset, mip->dev, mip->ino);
 		}
+		
 
 	}
 }
@@ -1658,12 +1764,16 @@ void myCopy(char * old_file, char * new_file){
     int oino, pino;
     char *parent;
     char *child;
-
+	char readbuf[128];
+	char writebuf[128];
 	char *temp_old_file1 = malloc(sizeof(char) * strlen(old_file));
 	char *temp_old_file_backup = malloc(sizeof(char) * strlen(old_file));
 	char *temp_old_file2 = malloc(sizeof(char) * strlen(old_file));
 	char *temp_new_file3 = malloc(sizeof(char) * strlen(old_file));
 	char *temp_new_file;
+	int fdRead;
+	int fdWrite;
+
 
 	strcpy(temp_old_file1, old_file);
 	strcpy(temp_old_file_backup, old_file);
@@ -1723,6 +1833,136 @@ void myCopy(char * old_file, char * new_file){
     iput(omip);
     iput(pmip);
 
+	printf("old_file = %s\n", old_file);
+	printf("new_file = %s\n", new_file);
+
+
+
+	fdRead = doOpen(old_file, 2);
+	fdWrite = doOpen(new_file, 1);
+
+	doWrite(fdRead, "hello_world", 11);
+
+	doRead(fdRead, readbuf, 128);
+	doWrite(fdWrite, readbuf, 128);
+
+	doClose(fdRead);
+	doClose(fdWrite);
+
     return;
 
 }
+
+void myCat(char * option, char * file_name)
+{
+	int fileD, inputOffset;
+	int fd1, fd2, fd3;
+	char writebuf[128];
+	char *readbuf = malloc(sizeof(char) * 1024);
+	char localinput[1024];
+	char nullstring[1024];
+	int i;
+	char *namecpy = malloc(sizeof(char) * strlen(file_name));
+	char *trimmedString;
+
+	if(strcmp(option, ">") == 0)//erases file and writes to it
+	{
+		fd1 = 0;
+		unlink(file_name);
+
+
+		strcpy(namecpy, file_name);
+		//unlink(file_name);
+
+		docreat(namecpy);
+		
+
+		printf("file_name = %s\n",file_name);
+		printf("option = %s\n", option);
+		fd1 = doOpen(file_name, 1);
+		
+		memset(localinput, NULL, 1024);
+
+
+		printf("enter in a string:\n");
+		fgets(localinput, 1024, stdin);
+
+		localinput[strlen(localinput)-1] = NULL;
+
+		i = 0;
+
+		while(localinput[i] != NULL)
+			i++;
+
+		trimmedString = malloc(sizeof(char) * i);
+
+
+		strncpy(trimmedString, localinput, i);
+		
+		printf("\n");
+
+	
+		printf("writing string :%s, of length %d\n", trimmedString, i);
+		doWrite(fd1, trimmedString, i);
+
+		doClose(fd1);
+
+	}
+	else if(strcmp(option, ">>") == 0)//append to file
+	{
+		fd2 = 0;
+		printf("file_name = %s\n",file_name);
+		printf("option = %s\n", option);
+		fd2 = doOpen(file_name, 2);
+
+		inputOffset = doRead(fd2, readbuf, -1);
+		printf("inputOffset = %d\n", inputOffset);
+
+		dolSeek(fd2, inputOffset);
+
+		printf("enter in a string:\n");
+		fgets(localinput, 1024, stdin);
+
+		printf("\n");
+
+		localinput[strlen(localinput)-1] = 0;
+
+		fd2 = doOpen(file_name, 1);
+
+		doWrite(fd2, localinput, strlen(localinput));
+
+		doClose(fd2);
+	}
+	else
+	{
+		fd3 = 0;
+		bzero(readbuf, 1024);
+		int length;
+		printf("file_name = %s\n",file_name);
+		printf("option = %s\n", option);
+		fd3 = doOpen(option, 0);
+
+		printf("readbuf = %s\n", readbuf);
+		length = doRead(fd3, readbuf, 1024);
+		printf("readbuf = %s\n", readbuf);
+		printf("length = %d\n", length);
+		printf("\n%s\n", readbuf);
+		doClose(fd3);
+	}
+
+}
+
+void myMount()
+{
+
+
+
+}
+void myUnmount()
+{
+
+
+
+}
+
+
