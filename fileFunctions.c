@@ -791,7 +791,10 @@ int my_creat(MINODE *pmip, char *child) //creates a file
 	ip->i_size = 0; //size in bytes, initially 0 for empty file
 	ip->i_links_count = 1; //links count=1, one occurrence currently
 	ip->i_atime = ip->i_ctime = ip->i_mtime = time(0L); //set all times to same
-
+	ip->i_block[0] = balloc(dev);//make new block for file data
+	for(int j = 1; j < 12; j++)
+		ip->i_block[j] = 0;	//init the rest of the blocks
+	
 	mip->refCount = 0;
 	mip->dirty = 1; //mark minode dirty
     mip->dev = dev; //mip->ino = ino;
@@ -1586,7 +1589,8 @@ int doWrite_file(int fd, char *buf, int nbytes){
 		start = tof->offset % BLKSIZE;	//start byte in block
 		
 		blk = mapBlk(ip,lbk,fd);//convert logical to physical block number
-		
+		if(blk == 0)//ensure a valid block is present
+			blk = ip->i_block[lbk] = balloc(mip->dev);//allocate new block for data
 		get_block(dev, blk, kbuf);//use running->dev?
 
 
@@ -1964,5 +1968,8 @@ void myUnmount()
 
 
 }
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 590e862401220968c9a5902e755471fc032b6db4
