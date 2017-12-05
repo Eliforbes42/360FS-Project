@@ -1586,8 +1586,8 @@ int doWrite_file(int fd, char *buf, int nbytes){
 		start = tof->offset % BLKSIZE;	//start byte in block
 		
 		blk = mapBlk(ip,lbk,fd);//convert logical to physical block number
-		if(blk == 0)
-			blk = ip->i_block[lbk] = balloc(mip->dev);
+		if(blk == 0)//ensure a valid block is present
+			blk = ip->i_block[lbk] = balloc(mip->dev);//allocate new block for data
 		get_block(dev, blk, kbuf);//use running->dev?
 
 
