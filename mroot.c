@@ -14,7 +14,7 @@
 MINODE minode[NMINODE];
 MINODE *root;
 PROC proc[NPROC], *running;
-struct mntTable mtable[4]; 
+struct mntTable *mtable[4]; 
 
 SUPER *sp;
 GD    *gp;
@@ -103,6 +103,8 @@ int findParent(MINODE *mip, int *ino, int *pip)
 	char buf[BLKSIZE]; char *cp;
 
     
+	fprintf(stderr, "inside findparent\n");
+
 	if(!mip) //exists?
 		return 1;
 
@@ -159,7 +161,6 @@ void init() //Initialize data structures of LEVEL-1:
 void mount_root() //mount root file system, establish / and CWDs
 {
 	char buf[BLKSIZE];
-
 	dev = open(device, O_RDRW); //open disk for read//open device for RW
 	
 	get_block(dev, 1, buf); //read SUPER block to verify it's an EXT2 FS
@@ -189,25 +190,25 @@ void mount_root() //mount root file system, establish / and CWDs
 
 	//Use mtable[0] to record
 	//--------------------------
+	mtable[0] = malloc(sizeof(struct mntTable));
+	mtable[0]->dev = dev; //dev = fd;
 
-	mtable[0].dev = dev; //dev = fd;
+	nblocks = mtable[0]->nblock = sp->s_blocks_count;
+	ninodes = mtable[0]->ninodes = sp->s_inodes_count; //ninodes, nblocks from superblock
 
-	nblocks = mtable[0].nblock = sp->s_blocks_count;
-	ninodes = mtable[0].ninodes = sp->s_inodes_count; //ninodes, nblocks from superblock
+	bmap = mtable[0]->bmap = gp->bg_block_bitmap;
+	imap = mtable[0]->imap = gp->bg_inode_bitmap;
 
-	bmap = mtable[0].bmap = gp->bg_block_bitmap;
-	imap = mtable[0].imap = gp->bg_inode_bitmap;
+	iblock = mtable[0]->iblock = gp->bg_inode_table; //bmap, imap, iblock from GD
 
-	iblock = mtable[0].iblock = gp->bg_inode_table; //bmap, imap, iblock from GD
-
-	mtable[0].mountDirPtr = root; //mount point DIR pointer = root;
+	mtable[0]->mountDirPtr = root; //mount point DIR pointer = root;
 
 	//printf("before string crap\n");
 
-	//strcpy(mtable[0].deviceName, device); //device name = "YOUR DISK name"	   
+	strcpy(mtable[0]->deviceName, device); //device name = "YOUR DISK name"	   
 	//printf("between string crap\n");
 
-	strcpy(mtable[0].mountedDirName, "/"); //mntPointDirName = "/";
+	strcpy(mtable[0]->mountedDirName, "/"); //mntPointDirName = "/";
 
 	//------------------------------------------------------------------------------
 
@@ -229,6 +230,7 @@ void mount_root() //mount root file system, establish / and CWDs
 	printf("end of mount_root\n");
 }
 
+
 void printMenu()
 {
 	printf("\nFunction choices (%sred not yet implemented%s)\n", COLOR_RED,COLOR_RESET);
@@ -241,13 +243,17 @@ void printMenu()
 	printf("|-------------------------------------------------|\n");
 	printf("| %sLevel 2%s |                                       |\n", COLOR_BLUE, COLOR_RESET);
 	printf("|-------------------------------------------------|\n");
-	printf("| %sopen%s | %sclose%s | %sread%s | %swrite%s | %slseek%s |           |\n", COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET);
-	printf("| %scat%s  | %scp%s    | %smv%s   |                           |\n", COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET);
+	printf("| open | close | read | write | lseek |           |\n");
+	printf("| %scat%s  | %scp%s    | mv   |                           |\n", COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET);
 	printf("|-------------------------------------------------|\n");
 	printf("| %sLevel 3%s |                                       |\n", COLOR_BLUE, COLOR_RESET);
 	printf("|-------------------------------------------------|\n");
 	printf("| %smount%s | %sunmount%s | %sfilePermissionChecking%s |      |\n", COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET,COLOR_RED,COLOR_RESET);
+	printf("| %sOther functions%s |                                       |\n", COLOR_BLUE, COLOR_RESET);
+	printf("|-------------------------------------------------|\n");
+	printf("|	|											  |\n");
 	printf("---------------------------------------------------\n");
+
 	
 }
 
@@ -280,6 +286,7 @@ int main(int argc, char *argv[])
 		printf("\nEnter '%shelp%s' for list of functions\n", COLOR_GREEN, COLOR_RESET);
 		printf("%sinput%s: ", COLOR_GREEN, COLOR_RESET);
 
+		bzero(cmd, 63);
 		bzero(pathname, 63);
 		bzero(pathname2, 63);
 
@@ -292,7 +299,12 @@ int main(int argc, char *argv[])
 
 		line[strlen(line)-1] = 0; //get rid of '\n'
 	
-		sscanf(line, "%s %s %s", cmd, pathname, pathname2);//put into separate strings	
+		sscanf(line, "%s %s %[^\n]", cmd, pathname, pathname2);//put into separate strings	
+		
+		printf("cmd = %s\n", cmd);
+		printf("pathname = %s\n", pathname);
+		printf("pathname2 = %s\n", pathname2);
+
 
 		if(strcmp(cmd, "ls") == 0)
 			ls_dir(pathname);
@@ -322,20 +334,24 @@ int main(int argc, char *argv[])
 
 		else if(strcmp(cmd, "stat") == 0)
 			mystat(pathname);
+
 		else if(strcmp(cmd, "symlink") == 0){
 			printf("try cmd=%s old=%s, new=%s\n", cmd, pathname, pathname2);
 			doSymlink(pathname, pathname2);
 		}
+
 		else if(strcmp(cmd, "readlink") == 0){
 			char buffer[BLKSIZE];
 			int sz = doReadlink(pathname, buffer);
 			printf("buffer=%s, sz=%d\n", buffer, sz);
 		}
+
 		else if(strcmp(cmd, "chmod") == 0){
 			char *eptr;
 			int mode = strtol(pathname, &eptr, 8);
 			doChmod(mode, pathname2);
 		}
+
 		else if(strcmp(cmd, "utime") == 0)
 			doUtime(pathname);
 		
@@ -343,8 +359,31 @@ int main(int argc, char *argv[])
 			printf("quitting. . .\n");
 			exit(0);
 		}
+
 		else if(strcmp(cmd, "help") == 0){
 			printMenu();
+		}
+
+		else if(strcmp(cmd, "mv") == 0){
+			myMove(pathname, pathname2);
+		}
+
+		else if(strcmp(cmd, "cp") == 0){
+			//printf("not done yet\n");
+			myCopy(pathname, pathname2);
+		}
+		else if(strcmp(cmd, "cat") == 0){
+			myCat(pathname, pathname2);
+		}
+
+		else if(strcmp(cmd, "pfd") == 0){
+			myPfd();
+		}
+		else if(strcmp(cmd, "mount") == 0){
+			myMount(pathname, pathname2);
+		}
+		else if(strcmp(cmd, "umount") == 0){
+			myUnmount(pathname);
 		}
 
 		else
