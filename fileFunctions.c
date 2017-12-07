@@ -340,6 +340,8 @@ int enter_symlink(MINODE *pmip, int ino, char *child){
 //ls related functions
 int ls_dir(char *dirname)
 {
+
+
 	char *tname;
 	char *cp; // char pointer
 	char buf[BLKSIZE], temp[256];
@@ -350,6 +352,8 @@ int ls_dir(char *dirname)
 
 	mip = running->cwd;
 	tmip = running->cwd; //keep cwd in temp, restore later
+
+
 
 	if(strcmp(dirname, "/") != 0 && dirname[0])
 	{
@@ -400,8 +404,10 @@ int ls_dir(char *dirname)
 		}
 	}
 
+	fprintf(stderr, "why does this need to be so hard\n");
+
 	printDir(mip->INODE);
-	
+
 	running->cwd = tmip;
 }
 
@@ -413,8 +419,12 @@ void printDir(INODE indir)
 	char *cp; //char pointer
 	char *savename;
 
+	
 
 	blk = indir.i_block[0]; //= a data block (number) of a DIR (e.g. i_block[0]);
+
+	
+
 
 	get_block(dev, blk, buf); //get data block into buf[ ]
 	
@@ -423,6 +433,9 @@ void printDir(INODE indir)
  	dp = (struct ext2_dir_entry_2 *)buf; //as dir_entry
 	cp = buf;
 	 
+
+	
+
 	printf("*************************************\n");
 	 
  	while(cp < buf + BLKSIZE)
@@ -439,6 +452,7 @@ void printDir(INODE indir)
 			strcpy(savename, dp->name);
 		}
 
+		//fprintf(stderr, "this still isnt working\n");
 		ls_file(dp->inode);
 		
 		//printf("%s\n",temp);//return back to this function
