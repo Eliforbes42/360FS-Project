@@ -149,7 +149,7 @@ int iput(MINODE *mip)  // dispose of a minode[] pointed by mip
         return;
  
 	/* write INODE back to disk */
-	printf("iput: dev=%d ino=%d\n", mip->dev, mip->ino); 
+	//printf("iput: dev=%d ino=%d\n", mip->dev, mip->ino); 
 
     //ask mailman to compute
     block  = (mip->ino - 1) / 8 + iblock; //8 inodes per block
@@ -228,7 +228,7 @@ int getino(char *pathname)
     //printf("3\n");
 
     for (i=0; i < n; i++){
-        printf("===========================================\n");
+        //printf("===========================================\n");
 
         printf("getino: i=%d name[%d]=%s\n", i, i, names[i]);
  
