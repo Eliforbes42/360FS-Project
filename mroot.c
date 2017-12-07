@@ -333,9 +333,8 @@ int main(int argc, char *argv[])
 		}
 		else if(strcmp(cmd, "chmod") == 0){
 			char *eptr;
-			int octNum = strtol(pathname, &eptr, 8);
-			//convert input str to real num(octal)-credit:techonthenet.com
-			doChmod(octNum, pathname2);
+			int mode = strtol(pathname, &eptr, 8);
+			doChmod(mode, pathname2);
 		}
 		else if(strcmp(cmd, "utime") == 0)
 			doUtime(pathname);
