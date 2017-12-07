@@ -26,7 +26,7 @@ char *rootdev;
 
 MINODE minode[NMINODE], *root;
 PROC proc[NPROC], *running;
-struct mntTable mtable[4];
+struct mntTable *mtable[4];
 
 
 //helper functions
@@ -791,9 +791,11 @@ int my_creat(MINODE *pmip, char *child) //creates a file
 	ip->i_size = 0; //size in bytes, initially 0 for empty file
 	ip->i_links_count = 1; //links count=1, one occurrence currently
 	ip->i_atime = ip->i_ctime = ip->i_mtime = time(0L); //set all times to same
+	
 	ip->i_block[0] = balloc(dev);//make new block for file data
-	for(int j = 1; j < 12; j++)
+	for(int j = 1; j < 12; j++){
 		ip->i_block[j] = 0;	//init the rest of the blocks
+	}
 	
 	mip->refCount = 0;
 	mip->dirty = 1; //mark minode dirty
@@ -1589,8 +1591,8 @@ int doWrite_file(int fd, char *buf, int nbytes){
 		start = tof->offset % BLKSIZE;	//start byte in block
 		
 		blk = mapBlk(ip,lbk,fd);//convert logical to physical block number
-		if(blk == 0)//ensure a valid block is present
-			blk = ip->i_block[lbk] = balloc(mip->dev);//allocate new block for data
+		if(blk == 0)
+			blk = ip->i_block[lbk] = balloc(mip->dev);
 		get_block(dev, blk, kbuf);//use running->dev?
 
 
@@ -1956,15 +1958,127 @@ void myCat(char * option, char * file_name)
 
 }
 
-void myMount()
+int myMount(char *fs, char *mountPoint)
 {
+	int i = 0, free = -1, ino, fdev;
+	char sbuf[BLKSIZE];
+	MINODE *mip;
+	//check for all arguments
+	if(*fs == NULL || *mountPoint == NULL){
+		printf("Error: Invalid arguments\n");
+		return -1;
+	}
+	printf("fs=%s, mountPt=%s\n", fs, mountPoint);
 
+	while(i < 4){		//check if fs already mounted		
+		//check null first
+		if(mtable[i] == NULL){//if no dev num, free slot
+			free = i;
+			break;//to ensure we don't reset free	
+		}
+		if(strcmp(mtable[i]->deviceName, fs) == 0){
+			printf("Error: Device already mounted\n");
+			return 0;//return ok since mounted?
+		}
+		i++;
+	}
+	if(free == -1)//ensure free entry (free was set)
+	{
+		printf("Error: No free mtable entry\n");	
+		return -1;
+	}
+	else
+		printf("Found free mtable entry: #%d\n", free);
+	
+	mtable[free] = malloc(sizeof(struct mntTable));	//allocate a MOUNT table entry
 
+	//check super block -- ensure EXT2 filesystem
+	fdev = open(fs, O_RDRW); //open fs for read/write
+	get_block(dev, 1, sbuf); //read SUPER block to verify EXT2 FS
+	sp = (SUPER *)sbuf; //as a super block structure
+	printf("check ext2 FS : ");
+	if (sp->s_magic != 0xEF53){//check magic number
+		printf("NOT an EXT2 FS\n\n");
+		exit(2);//err out
+	}
+
+	//get ino and then minode
+	ino = getino(mountPoint);
+	mip = iget(dev, ino);
+
+	//check if dir, then check if empty
+	if((mip->INODE.i_mode & 0xF000) == 0x4000){
+		if(verifyEmptyDir(mip) == 0){
+			printf("Error: Can't mount, DIR not empty\n");
+			return -1;
+		}
+	}
+	else{
+		printf("Error: Can't mount, not a DIR\n");
+		return -1;
+	}
+	//if here, we have empty DIR!
+
+	get_block(dev, 2, sbuf);//get group descriptor for other info
+	gp = (GD *)sbuf;
+
+	//record mountTable entries
+	mtable[free]->dev = fdev;//set dev
+	strncpy(mtable[free]->deviceName, fs, 63);
+	mtable[free]->nblock = sp->s_blocks_count;
+	mtable[free]->ninodes = sp->s_inodes_count; //ninodes, nblocks from superblock
+
+	mtable[free]->bmap = gp->bg_block_bitmap;
+	mtable[free]->imap = gp->bg_inode_bitmap;
+	mtable[free]->iblock = gp->bg_inode_table; //bmap, imap, iblock from GD
+	mtable[free]->mountDirPtr = mip;  //set mountPtr to mountPoint
+	strncpy(mtable[free]->mountedDirName, mountPoint, 63);
+	mip->mounted = 1;
+	mip->mptr = &mtable[free];
+	mtable[free]->mountDirPtr = mip;
+	printf("Mounted %s to %s\n", fs, mountPoint);
 
 }
-void myUnmount()
+int myUnmount(char *fs)
 {
+	int found = 0, i = 0, ino;
+	if(*fs == NULL){
+		printf("Error: Invalid arguments\n");
+		return -1;
+	}
+	printf("fs=%s\n", fs);
 
+	while(i < 4){		//check if fs already mounted		
+		if(mtable[i] == NULL){//if no dev num, free slot
+			break;//get out, nothing left
+		}
+		if(strcmp(mtable[i]->deviceName, fs) == 0){
+			found = 1;
+			break;//get out, found the filesystem
+		}
+		i++;
+	}
+	if(found == 0){
+		printf("Error: No mount with name=%s\n",fs);
+		return -1;//err out
+	}
+	
+	//check all minodes for files open under mounted dev
+	for(int j = 0; j < NMINODE; j++){
+		if(minode[j].dev == mtable[i]->dev){
+			printf("Error: Can't unmount with active files\n");
+			return -1;
+		}
+	}
 
+	ino = getino(mtable[i]->mountedDirName);//find in-memory ino
+	for(int j = 0; j < NMINODE; j++){//then find the minode
+		if(minode[j].ino == ino){
+			minode[j].mounted = 0;//reset mounted flag
+			iput(&minode[j]);//and put minode back
+		}
+	}
+	printf("Successfully umounted %s\n",fs);
+	return 0;//return success
 
 }
