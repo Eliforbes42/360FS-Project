@@ -12,7 +12,7 @@
 MINODE minode[NMINODE];
 MINODE *root;
 PROC   proc[NPROC], *running;
-struct mntTable mtable[4]; 
+struct mntTable *mtable[4]; 
 
 SUPER *sp;
 GD    *gp;
@@ -216,7 +216,11 @@ int getino(char *pathname)
         mip = iget(dev, 2);
     else
         mip = iget(dev, proc[0].cwd->ino);
-
+	
+	if(mip->mounted == 1){
+			//dev = mip->mptr->dev;
+			mip = iget(mip->mptr->dev, 2);
+	}
     //printf("getino:2\n");
 
     buf = pathname; //strcpy(buf, pathname);
@@ -244,7 +248,7 @@ int getino(char *pathname)
 
         iput(mip);
 
-        mip = iget(dev, ino);
+        mip = iget(dev, ino);		
     }
 
     iput(mip);
