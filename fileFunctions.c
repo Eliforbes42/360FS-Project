@@ -1965,8 +1965,15 @@ int myMount(char *fs, char *mountPoint)
 	MINODE *mip;
 	//check for all arguments
 	if(*fs == NULL || *mountPoint == NULL){
-		printf("Error: Invalid arguments\n");
-		return -1;
+		printf("--Mounted Devices--\n");
+		for(int k = 0; k < 4; k++)
+		{
+			//check null first
+			if(mtable[k] == NULL)//if no dev num, free slot
+				break;//to ensure we don't reset free	
+			printf("[%d]: %s at %s\n", k, mtable[k]->deviceName, mtable[k]->mountedDirName);
+		}
+		return 0;
 	}
 	printf("fs=%s, mountPt=%s\n", fs, mountPoint);
 
