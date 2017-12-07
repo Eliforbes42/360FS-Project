@@ -10,10 +10,15 @@ typedef struct ext2_inode       INODE;
 typedef struct ext2_dir_entry_2 DIR;
 
 #define BLKSIZE     1024
-#define O_RDRW        02
 #define NMINODE      100
 #define NFD           16
 #define NPROC          2
+
+//#define O_RDONLY	  0
+//#define O_WRONLY	  1
+#define O_RDRW        2
+//#define O_CREAT   0x0100  //256
+//#define O_APPEND      3
 
 #define COLOR_RESET  "\x1B[0m"
 #define COLOR_RED  "\x1B[31m"
@@ -64,7 +69,7 @@ struct mntTable{
 extern MINODE minode[NMINODE];
 extern MINODE *root;
 extern PROC proc[NPROC], *running;
-extern struct mntTable mtable[4]; 
+extern struct mntTable *mtable[4]; 
 
 extern SUPER *sp;
 extern GD    *gp;
